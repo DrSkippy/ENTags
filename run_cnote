@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+export PYTHONPATH=/Users/scotthendrickson/IdeaProjects/EN/evernote-sdk-python/lib
+./cnote.py
