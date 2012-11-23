@@ -3,7 +3,7 @@ ENTags
 
 Evernote tag utilities (alpha version).  Library and command line utility.
 
-These rough tools do not come with any warrenty or assurances of data integrity!
+These rough tools do not come with any warranty or assurances of data integrity!
 Know what you are getting doing, think twice, use carefully!
 
 Requirements:
