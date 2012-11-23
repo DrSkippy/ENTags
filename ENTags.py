@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # Scott Hendrickson
+# @drskippy27
 
 import sys
 import random
@@ -77,13 +78,20 @@ class TagList(object):
             sys.exit(1)
         # Object tags attribute is a list of TagWrappers
         self.tags = {}
-        for t in tags:
-            self.tags[t.guid] = TagWrapper(t)
         self.idToNameDict = {}
         self.nameToIdDict = {}
-        for tid in self.tags:
-            self.idToNameDict[tid] = self.tags[tid].getName()
-            self.nameToIdDict[self.tags[tid].getName()] = tid
+        for t in tags:
+            self.tags[t.guid] = TagWrapper(t)
+            self.idToNameDict[t.guid] = self.tags[t.guid].getName()
+            self.nameToIdDict[self.tags[t.guid].getName()] = t.guid
+
+    def hasChild(self, guid = None, name = None):
+        tid = self.safeGetTagGuid(guid, name)
+        if tid is not None:
+            for tstid in self.tags:
+                if tid == self.tags[tstid].getParentGuid():
+                    return True
+        return False
     
     def tagExists(self, _name=None, _guid=None):
         # check local taglist for tag existence by either name or guid
@@ -319,22 +327,47 @@ class ENManager(object):
         return ''.join( self.startUpMessage )
     
     def getNotebooks(self):
-        # get a the of notebooks from server
+        # get the of notebooks from server
         if not self.notebooksClean:
             self.notebooks = self.noteStore.listNotebooks(self.authToken)
             self.notebooksClean = True
         return self.notebooks
         
-    def getNotesWithTags(self, _guidList):
-        filtr = NoteStore.NoteFilter()
-        filtr.tagGuids=_guidList
-        noteList = self.noteStore.findNotes(self.authToken, filtr, 0, 100)
-        for n in noteList.notes:
-            print n.title, str(n.tagGuids)
-
     def listNotebookNames(self):
         # return a list of notebook names
         return [notebook.name for notebook in self.getNotebooks()]
+    
+    def getNotesWithTags(self, _guidList):
+        # retreive all note matching tags in list
+        filtr = NoteStore.NoteFilter()
+        filtr.tagGuids=_guidList
+        return self.noteStore.findNotes(self.authToken, filtr, 0, 100)
+
+    def mergeTags(self, tagNameOld, tagNameNew):
+        # merge tagNameOld --> tagNameNew
+        res = []
+        guidOld = self.tl.getGuidByName(tagNameOld)
+        guidNew = self.tl.getGuidByName(tagNameNew)
+        if guidOld is None or guidNew is None:
+            res.append('Both tags need to exist!')
+            return res
+        # find notes with tag tagNameOld
+        noteList = self.getNotesWithTags([guidOld])
+        # add tag tagNameNew to notes and remove tagNameOld
+        res.append('Updating %s --> %s in %d notes...'%(tagNameOld, tagNameNew, len(noteList.notes)))
+        for n in noteList.notes:
+            n.tagGuids.remove(guidOld)
+            n.tagGuids.append(guidNew)
+            # update note
+            try:
+                self.noteStore.updateNote(self.authToken, n)
+                res.append('  updated: "%s"'%n.title)
+            except Exception:
+                res.append("Update note error, skipping %s"%n.title)
+                return res
+        # delete tagNameOld
+        res.append(self.deleteTag(tagNameOld))
+        return res
             
     def getTagNamesList(self):
         return self.tl.nameToIdDict.keys()
@@ -421,35 +454,44 @@ if __name__ == "__main__":
     import random
     from pprint import pprint
 
+    sections = range(5)
+    sections = [1]
+
     print "Creating tag manager object..."
     en = ENManager()
     print en.getStartUpMessage()
-    pprint(en.getNotebooks())
-    pprint(en.listNotebookNames())
-    pprint(en.getTagNamesList())
-    print
-    print en.getNotesWithTags(["e47f3ecb-e198-43a2-8556-f3d63c0e5ae0"])
-    print
-    newName  = "temp_%d"%random.randint(1324134,99999999)
-    newName1 = "temp_%d"%random.randint(1324134,99999999)
-    newName2 = "temp_%d"%random.randint(1324134,99999999)
-    newName3 = "temp_%d"%random.randint(1324134,99999999)
-    print newName, newName1, newName2, newName3
-    en.createTag(newName)
-    en.createTag(newName1, newName)
-    en.createTag(newName3)
-    #
-    en.renameTag(newName1, newName2)
-    en.updateParent(newName2, newName3)
-    print
-    pprint(en.getTagNamesList())
-    print
-    for id in en.tl.tags:
-        print en.tl.tags[id].getName(),"\t",  en.getNoteCountbyTag(en.tl.tags[id].getName())
-    print
-    pprint(en.listTagLineages())
-    print
-    pprint(en.listTagLineages("temp_.*"))
-    print 
-    print str(en.tl)
-    print 
+    if 1 in sections:
+        pprint(en.getNotebooks())
+        pprint(en.listNotebookNames())
+        print
+        pprint(en.getTagNamesList())
+        print
+        pprint(en.getNotesWithTags(["e47f3ecb-e198-43a2-8556-f3d63c0e5ae0"]))
+        print
+        pprint(en.mergeTags("cat","Lewis"))
+        print
+    if 2 in sections:
+        newName  = "temp_%d"%random.randint(1324134,99999999)
+        newName1 = "temp_%d"%random.randint(1324134,99999999)
+        newName2 = "temp_%d"%random.randint(1324134,99999999)
+        newName3 = "temp_%d"%random.randint(1324134,99999999)
+        print newName, newName1, newName2, newName3
+        en.createTag(newName)
+        en.createTag(newName1, newName)
+        en.createTag(newName3)
+        #
+        en.renameTag(newName1, newName2)
+        en.updateParent(newName2, newName3)
+        print
+        pprint(en.getTagNamesList())
+        print
+    if 3 in sections:
+        for id in en.tl.tags:
+            print en.tl.tags[id].getName(),"\t",  en.getNoteCountbyTag(en.tl.tags[id].getName())
+        print
+        pprint(en.listTagLineages())
+        print
+        pprint(en.listTagLineages("temp_.*"))
+        print 
+        print str(en.tl)
+        print 

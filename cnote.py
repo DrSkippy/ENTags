@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #  Command line tag manager
 #  Scott Hendrickson
-
+import datetime
 from cmd import Cmd
 import optparse
 import sys
@@ -9,7 +9,7 @@ from operator import itemgetter, attrgetter
 
 import ENTags
 
-INTRO="""Evernote Command Line structure manager. Version 1"""
+INTRO="""Evernote Command Line structure manager. Version 0.01b"""
 
 class cnote(Cmd):
     
@@ -34,6 +34,10 @@ class cnote(Cmd):
         else:
             self.outfile = None
         return line
+
+    def emptyline(self):
+        print "Current time: <%s>\n"%str(datetime.datetime.now()).split(".")[0]
+        return
 
     def help_file(self):
         print "Append '> filename' to any command to redirect output from that"
@@ -76,7 +80,7 @@ class cnote(Cmd):
         return res
     
     def help_quotes(self):
-        print "For tag names containing spaces, surround with double quotes, i.e.,  \"tag\"."
+        print 'For tag names containing spaces, surround with double quotes, i.e.,  "tag name".'
 
 ###########################             
 #  commands
@@ -150,6 +154,28 @@ class cnote(Cmd):
     def help_createTag(self):
         print 'createTag (ct) - Create a new tag. First argument is tag name, second argument is tag parent name (optional).'
     
+    ##
+    def do_mt(self, args):
+        self.do_mergeTags(args)
+
+    def help_mt(self):
+        self.help_mergeTags()
+
+    def do_mergeTags(self, args):
+        res = self.outHead
+        alist = self.getArgList(args)
+        if len(alist) == 2:
+            oldTagName = alist[0].strip()
+            newTagName = alist[1].strip()
+            doList = self.en.mergeTags(oldTagName, newTagName)
+            res += '\n'.join([x for x in doList if x is not None])
+        else:
+            res += 'Wrong number of arguments, two tag names required.'
+        res +='\n'
+        self.response(res)
+
+    def help_mergeTags(self):
+        print 'mergeTags (mt) - Arguments OldTagName NewTagName. Updates all notes with oldTagName --> newTagName and deletes OldTagName.'
     ##
     def do_rt(self, args):
         self.do_renameTag(args)
@@ -231,16 +257,16 @@ class cnote(Cmd):
     
     ##
     def do_dtc(self, args):
-        self.do_deleteTagsCount(args)
+        self.do_deleteTagsByCount(args)
 
     def help_dtc(self):
-        self.help_deleteTagsCount()
+        self.help_deleteTagsByCount()
 
-    def do_deleteTagsCount(self, args):
+    def do_deleteTagsByCount(self, args):
         res = self.outHead
         alist = self.getArgList(args)
         try:
-            nlimit = int(alist.pop())
+            nlimit = int(alist.pop(0))
             res += "Deleting tags with fewer than %d notes (this may take time)...\n"%nlimit
         except ValueError:
             res += "Please enter a number in the first position. No tags deleted.\n"
@@ -255,18 +281,23 @@ class cnote(Cmd):
             tn = self.en.tl.getNameByGuid(guid)
             try:
                 nnotes = int(tmp[guid])
-                if nnotes < nlimit:
+                hc = self.en.tl.hasChild(guid)
+                # don't delete tags with children, even if notecount is low
+                if nnotes < nlimit and not hc:
                     tmpres = self.en.deleteTag(tn)
                     if tmpres is not None:
                         res += tmpres
                     res += '%s deleted (%d notes)\n'% (tn, nnotes)
                 else:
-                    res += '%s not deleted (%d notes)\n'% (tn, nnotes)
+                    if hc:
+                        res += '%s not deleted (%d notes, has at least 1 child)\n'% (tn, nnotes)
+                    else:
+                        res += '%s not deleted (%d notes)\n'% (tn, nnotes)
             except ValueError:
                 pass
         self.response(res)
 
-    def help_deleteTagsCount(self):
+    def help_deleteTagsByCount(self):
         print "deleteTagsCount (dtc) - deletes tags with note count less than the argument"
     
     ##
@@ -282,7 +313,7 @@ class cnote(Cmd):
         for a in alist:
             resp = self.en.deleteTag(a)
             if resp is None:
-                res += '%s: Deleted'%a
+                res += 'Deleted: %s'%a
             else:
                 res += '%s: %s'%(a,resp)
             res += '\n'
