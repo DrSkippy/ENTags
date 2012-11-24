@@ -245,7 +245,10 @@ class cnote(Cmd):
         alist = self.getArgList(args)
         if alist is None:
             alist = []
-        tmp = self.en.getNoteCountbyTag(nameList = alist)
+        if len(alist) == 1:
+            tmp = self.en.getNoteCountByTag(pattern = alist[0])
+        else:
+            tmp = self.en.getNoteCountByTag(nameList = alist)
         for guid in tmp:
             tn = self.en.tl.getNameByGuid(guid)
             ltn = len(tn)
@@ -253,7 +256,7 @@ class cnote(Cmd):
         self.response(res)
         
     def help_noteCounts(self):
-        print 'noteCounts (nc) - Get the note count for tag with tagName.'
+        print 'noteCounts (nc) - Get the note count for tag with tagNames.  A single argument is interpreted as a search string. A search string in EN is not a regex (only here: use * for wildcard).'
     
     ##
     def do_dtc(self, args):
@@ -276,7 +279,12 @@ class cnote(Cmd):
             res += "Please enter a number. No tags deleted.\n"
             self.response(res)
             return
-        tmp = self.en.getNoteCountbyTag(nameList = alist)
+        if len(alist) == 1:
+            # if only one arg, the interpret as a search for tag (not regex, but EN search sentax)
+            # "tag:" implied
+            tmp = self.en.getNoteCountbyTag(pattern = alist[0])
+        else:
+            tmp = self.en.getNoteCountbyTag(nameList = alist)
         for guid in tmp:
             tn = self.en.tl.getNameByGuid(guid)
             try:

@@ -5,6 +5,7 @@
 import sys
 import random
 import re
+import string
 from SpellChecker import aspell
 
 import thrift.protocol.TBinaryProtocol as TBinaryProtocol
@@ -243,6 +244,7 @@ import ConfigParser
 class ENManager(object):
     
     DEFAULT_FILE_NAME = "ENTags.cfg"
+    trashName = "_trash_cnote_"
     
     def __init__(self):
         config = ConfigParser.ConfigParser()
@@ -398,17 +400,19 @@ class ENManager(object):
         else:
             return "Tag already esists"
 
+    def getTrashGuid(self):
+        return self.tl.safeGetTagGuid(name=self.trashName)
+
     def deleteTag(self, tagname):
         if self.tl.tagExists(tagname):
-            trashName = "_trash_cnote_"
-            if not self.tl.tagExists(trashName):
-                self.createTag(trashName)
-            res = self.updateParent(tagname, trashName)
+            if not self.tl.tagExists(self.trashName):
+                self.createTag(self.trashName)
+            res = self.updateParent(tagname, self.trashName)
         else:
             res = "Tag not found"
         return res
 
-    def getNoteCountbyTag(self, name = None, nameList = None):
+    def getNoteCountByTag(self, name = None, nameList = None, pattern = None):
         res = {}
         if name is not None:
             guidList = [self.tl.getGuidByName(name)]
@@ -421,17 +425,42 @@ class ENManager(object):
                     tmp = self.tl.getGuidByName(x)
                     if tmp is not None:
                         guidList.append(tmp)
-        for guid in guidList:
-            filter = NoteStore.NoteFilter(None, True, None, None, 
-                    [guid], None, False)
+        trashGuid = self.getTrashGuid()
+        if pattern is not None:
+            tagSearch = "tag:%s"%pattern
+            # search returns all tags for notes containing matching tag
+            # so need to filter here for the tag we want
+            # lame assumption, re without punctuation will match?
+            reFilter = ""
+            if not pattern.startswith('-'):
+                # NOT is not implemented yet
+                reFilter = ''
+            # punt
+            if not pattern.endswith('*'):
+                reFilter += pattern.strip(string.punctuation) + '\\b'
+            else:
+                reFilter += pattern.strip(string.punctuation)
+            localFilter = re.compile(reFilter, re.IGNORECASE)
+            filter = NoteStore.NoteFilter(None, True, tagSearch, None, None, None, False)
             noteCounts = self.noteStore.findNoteCounts(self.authToken, filter, False)
             if noteCounts.tagCounts is not None:
-                if guid in noteCounts.tagCounts:
+                for guid in noteCounts.tagCounts:
+                    if self.tl.tags[guid].getParentGuid() == trashGuid or not localFilter.search(self.tl.tags[guid].getName()) :
+                        continue
                     res[guid] = noteCounts.tagCounts[guid]
+        else:
+            for guid in guidList:
+                if self.tl.tags[guid].getParentGuid() == trashGuid:
+                    continue
+                filter = NoteStore.NoteFilter(None, True, None, None, [guid], None, False)
+                noteCounts = self.noteStore.findNoteCounts(self.authToken, filter, False)
+                if noteCounts.tagCounts is not None:
+                    if guid in noteCounts.tagCounts:
+                        res[guid] = noteCounts.tagCounts[guid]
+                    else:
+                        res[guid] = -1
                 else:
                     res[guid] = -1
-            else:
-                res[guid] = -1
         return res
     
     def checkTagSpelling(self, wordList = []):
